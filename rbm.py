@@ -92,6 +92,27 @@ class RBM:
 		self.B += deltaB
 		self.C += deltaC
 
+class gibbsSampler:
+	def __init__(self, rbm, nMarkovChains, nMarkovIter):
+		self.rbm = rbm
+		self.nMarkovChains = nMarkovChains
+		self.nMarkovIter = nMarkovIter
+
+		self.markovVisible = np.zeros((rbm.nVisible, self.nMarkovChains), dtype=np.int)
+		self.markovHidden = np.zeros((rbm.nHidden, self.nMarkovChains), dtype=np.int)
+
+	def reset(self):
+		self.markovVisible = np.random.randint(0, 2, size=self.markovVisible.shape)
+
+	def sample(self, reset=False):
+		if reset:
+			self.reset()
+		for _ in range(self.nMarkovIter):
+			self.markovHidden = rbm.sampleHidden(self.markovVisible)
+			self.markovVisible = rbm.sampleVisible(self.markovHidden)
+
+		return self.markovVisible, self.markovHidden
+
 class RBMTrainerPCB:
 	def __init__(self, nMarkovChains):
 		self.nMarkovChains = nMarkovChains
