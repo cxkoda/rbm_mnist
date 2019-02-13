@@ -43,10 +43,16 @@ class RBM:
 		return sigmoid((2. * hidden - 1.) * (np.dot(self.W.T, visible).T + self.C).T)
 
 	def sampleHidden(self, visible):
-		return np.array(np.random.rand(self.nHidden) < self.probGivenVisible(visible, 1).T, dtype=np.int).T
+		probsOne = self.probGivenVisible(visible, 1)
+		uniformSamples = np.random.rand(*probsOne.shape)
+		probSamples = np.array(uniformSamples < probsOne, dtype=np.int)
+		return probSamples
 
 	def sampleVisible(self, hidden):
-		return np.array(np.random.rand(self.nVisible) < self.probGivenHidden(1, hidden).T, dtype=np.int).T
+		probsOne = self.probGivenHidden(1, hidden)
+		uniformSamples = np.random.rand(*probsOne.shape)
+		probSamples = np.array(uniformSamples < probsOne, dtype=np.int)
+		return probSamples
 
 	def logProb_dW(self, visible, hidden):
 		return np.einsum('ik,jk->ijk', visible, hidden)
