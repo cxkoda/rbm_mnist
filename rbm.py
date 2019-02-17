@@ -5,19 +5,26 @@ def sigmoid(x):
 	return 1. / (1. + np.exp(-x))
 
 class RBM:
-	def __init__(self, nVisible, nHidden):
+	def __init__(self, nVisible, nHidden, randomSeed=None):
 		self.nVisible = nVisible
 		self.nHidden = nHidden
+		self.nParams = nVisible * nHidden + nVisible + nHidden
 
-		self.W = np.zeros((self.nVisible, self.nHidden))
-		self.B = np.zeros(self.nVisible)
-		self.C = np.zeros(self.nHidden)
+		self.rng = np.random.RandomState(randomSeed)
+		self.weights = np.asarray(self.rng.uniform(low=-0.01, high=0.01, size=self.nParams))
 
-		# self.W = np.random.normal(0, 1, size=self.W.shape)
-		# self.B = np.random.normal(0, 0.1, size=self.B.shape)
-		# self.C = np.random.normal(0, 0.1, size=self.C.shape)
+		# create some views on the stored weights
+		iStart = 0
+		iEnd = nVisible * nHidden
+		self.W = self.weights[iStart: iEnd].reshape(nVisible, nHidden)
 
-		self.nParams = self.W.size + self.B.size + self.C.size
+		iStart = iEnd
+		iEnd += nVisible
+		self.B = self.weights[iStart: iEnd]
+
+		iStart = iEnd
+		iEnd += nHidden
+		self.C = self.weights[iStart: iEnd]
 
 	def load(self, filename):
 		f = open(filename, 'rb')
@@ -36,21 +43,21 @@ class RBM:
 	def logProb(self, visible, hidden):
 		return (self.W.dot(hidden) + self.B).dot(visible) + self.C.dot(hidden)
 
-	def probGivenHidden(self, visible, hidden):
+	def probVisibleGivenHidden(self, visible, hidden):
 		return sigmoid((2. * visible - 1.) * (np.dot(self.W, hidden).T + self.B).T)
 
-	def probGivenVisible(self, visible, hidden):
+	def probHiddenGivenVisible(self, visible, hidden):
 		return sigmoid((2. * hidden - 1.) * (np.dot(self.W.T, visible).T + self.C).T)
 
 	def sampleHidden(self, visible):
-		probsOne = self.probGivenVisible(visible, 1)
-		uniformSamples = np.random.rand(*probsOne.shape)
+		probsOne = self.probHiddenGivenVisible(visible, 1)
+		uniformSamples = self.rng.uniform(low=0, high=1, size=probsOne.shape)
 		probSamples = np.array(uniformSamples < probsOne, dtype=np.int)
 		return probSamples
 
 	def sampleVisible(self, hidden):
-		probsOne = self.probGivenHidden(1, hidden)
-		uniformSamples = np.random.rand(*probsOne.shape)
+		probsOne = self.probVisibleGivenHidden(1, hidden)
+		uniformSamples = self.rng.uniform(low=0, high=1, size=probsOne.shape)
 		probSamples = np.array(uniformSamples < probsOne, dtype=np.int)
 		return probSamples
 
@@ -74,23 +81,10 @@ class RBM:
 		))
 
 	def get_params(self):
-		return np.concatenate((
-			np.ravel(self.W),
-			self.B,
-			self.C
-		))
+		return self.weights
 
 	def update(self, deltaTheta):
-		iStart = 0
-		deltaW = deltaTheta[iStart:iStart + self.W.size].reshape(self.W.shape)
-		iStart += self.W.size
-		deltaB = deltaTheta[iStart:iStart + self.B.size]
-		iStart += self.B.size
-		deltaC = deltaTheta[iStart:iStart + self.C.size]
-
-		self.W += deltaW
-		self.B += deltaB
-		self.C += deltaC
+		self.weights += deltaTheta
 
 class gibbsSampler:
 	def __init__(self, rbm, nMarkovChains, nMarkovIter):
