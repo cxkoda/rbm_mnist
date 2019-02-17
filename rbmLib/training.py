@@ -3,43 +3,31 @@ import numpy as np
 
 
 class RBMTrainerPCB:
-	def __init__(self, nMarkovChains, randomSeed = None):
-		self.nMarkovChains = nMarkovChains
-		self.rng = np.random.RandomState(randomSeed)
+	def __init__(self,  randomSeed=None):
+		self.randomSeed = randomSeed
 
 	def prepare(self, rbm, visibleData):
-		self.markovVisible = np.zeros((rbm.nVisible, self.nMarkovChains), dtype=np.int)
-		self.markovHidden = np.zeros((rbm.nHidden, self.nMarkovChains), dtype=np.int)
+		self.gibbs = gibbsSampler(rbm, randomSeed=self.randomSeed)
+		return visibleData.T
 
-		self.markovVisible = self.rng.random_integers(0, 1, size=self.markovVisible.shape)
-		self.markovHidden = self.rng.random_integers(0, 1, size=self.markovHidden.shape)
+	def get_deltaTheta(self, rbm, visibleData, nMarkovChains, nMarkovIter):
+		hiddenDataSample = rbm.sampleHidden(visibleData)
 
-	def gibbs(self, rbm, nMarkovIter):
-		self.markovVisible = self.rng.random_integers(0, 1, size=self.markovVisible.shape)
-		for _ in range(nMarkovIter):
-			self.markovHidden = rbm.sampleHidden(self.markovVisible)
-			self.markovVisible = rbm.sampleVisible(self.markovHidden)
+		positivePhase = np.mean(rbm.logProb_dTheta(visibleData, hiddenDataSample), axis=1)
 
-	def get_deltaTheta(self, rbm, visibleData, nMarkovIter):
-		_visibleData = visibleData.T
-		hiddenDataSample = rbm.sampleHidden(_visibleData)
-
-		positivePhase = np.mean(rbm.logProb_dTheta(_visibleData, hiddenDataSample), axis=1)
-
-		self.gibbs(rbm, nMarkovIter)
-		negativePhase = np.mean(rbm.logProb_dTheta(self.markovVisible, self.markovHidden), axis=1)
+		sampledVisible, sampledHidden = self.gibbs.sample(nMarkovChains, nMarkovIter)
+		negativePhase = np.mean(rbm.logProb_dTheta(sampledVisible, sampledHidden), axis=1)
 
 		deltaTheta = positivePhase - negativePhase
 		return deltaTheta
 
-	def train(self, rbm, visibleData, learningRate, nMarkovIter, maxTrainingIter=10000, convergenceThreshold=1e-3):
+	def train(self, rbm, visibleData, learningRate=0.1, nMarkovChains=100, nMarkovIter=100, maxTrainingIter=10000, convergenceThreshold=1e-3):
 		assert(isinstance(rbm, RBM))
-
-		self.prepare(rbm, visibleData)
+		visibleData = self.prepare(rbm, visibleData)
 
 		for iTrainingIter in range(maxTrainingIter):
 			try:
-				deltaTheta = self.get_deltaTheta(rbm, visibleData, nMarkovIter)
+				deltaTheta = self.get_deltaTheta(rbm, visibleData, nMarkovChains, nMarkovIter)
 			except Exception as e:
 				print('Training Aborted: exception in get_delta:', e)
 				break
@@ -47,7 +35,6 @@ class RBMTrainerPCB:
 			if np.isnan(deltaTheta).any():
 				print('Training Aborted: nans detected')
 				break
-
 
 			rbm.update(learningRate * deltaTheta)
 
@@ -67,14 +54,13 @@ class RBMTrainerPCBBroyden(RBMTrainerPCB):
 		self.logProb_dTheta_old = 0
 
 	def prepare(self, rbm, visibleData):
-		RBMTrainerPCB.prepare(self, rbm, visibleData)
+		visibleData = RBMTrainerPCB.prepare(self, rbm, visibleData)
 		self.inverseHessian = np.diagflat(np.ones(rbm.nParams))
 
 		# First step is explicit in the broyden scheme
-		_visibleData = visibleData.T
-		hiddenDataSample = rbm.sampleHidden(_visibleData)
+		hiddenDataSample = rbm.sampleHidden(visibleData)
 
-		positivePhase = np.mean(rbm.logProb_dTheta(_visibleData, hiddenDataSample), axis=-1)
+		positivePhase = np.mean(rbm.logProb_dTheta(visibleData, hiddenDataSample), axis=-1)
 
 		self.gibbs(rbm, 100)
 		negativeVectors = rbm.logProb_dTheta(self.markovVisible, self.markovHidden)
@@ -91,12 +77,13 @@ class RBMTrainerPCBBroyden(RBMTrainerPCB):
 		rbm.update(deltaTheta)
 		self.deltaTheta_old = deltaTheta
 
+		return visibleData
+
 
 	def get_deltaTheta(self, rbm, visibleData, nMarkovIter):
-		_visibleData = visibleData.T
-		hiddenDataSample = rbm.sampleHidden(_visibleData)
+		hiddenDataSample = rbm.sampleHidden(visibleData)
 
-		positivePhase = np.mean(rbm.logProb_dTheta(_visibleData, hiddenDataSample), axis=-1)
+		positivePhase = np.mean(rbm.logProb_dTheta(visibleData, hiddenDataSample), axis=-1)
 
 		self.gibbs(rbm, nMarkovIter)
 		negativeVectors = rbm.logProb_dTheta(self.markovVisible, self.markovHidden)

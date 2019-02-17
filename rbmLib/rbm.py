@@ -87,21 +87,22 @@ class RBM:
 		self.weights += deltaTheta
 
 class gibbsSampler:
-	def __init__(self, rbm, nMarkovChains, nMarkovIter):
+	def __init__(self, rbm, randomSeed=None):
 		self.rbm = rbm
+		self.rng = np.random.RandomState(randomSeed)
+		self.nMarkovChains = 0
+
+	def resetMarkovChains(self, nMarkovChains):
 		self.nMarkovChains = nMarkovChains
-		self.nMarkovIter = nMarkovIter
+		self.markovVisible = self.rng.random_integers(0, 1, size=(self.rbm.nVisible, self.nMarkovChains))
+		self.markovHidden = self.rng.random_integers(0, 1, size=(self.rbm.nHidden, self.nMarkovChains))
 
-		self.markovVisible = np.zeros((rbm.nVisible, self.nMarkovChains), dtype=np.int)
-		self.markovHidden = np.zeros((rbm.nHidden, self.nMarkovChains), dtype=np.int)
 
-	def reset(self):
-		self.markovVisible = np.random.randint(0, 2, size=self.markovVisible.shape)
+	def sample(self, nMarkovChains=100, nMarkovIter=100):
+		if self.nMarkovChains != nMarkovChains:
+			self.resetMarkovChains(nMarkovChains)
 
-	def sample(self, reset=False):
-		if reset:
-			self.reset()
-		for _ in range(self.nMarkovIter):
+		for _ in range(nMarkovIter):
 			self.markovHidden = self.rbm.sampleHidden(self.markovVisible)
 			self.markovVisible = self.rbm.sampleVisible(self.markovHidden)
 
