@@ -5,15 +5,14 @@ import numpy as np
 
 
 if __name__ == "__main__":
-	rbm = RBM(filename="mnist_300.rbm", randomSeed=1234)
+	rbm = RBM(filename="mnist_100.rbm")
 	sampler = gibbsSampler(rbm)
 
 	nSamples = 10
-
 	hidden = np.random.random_integers(0, 1, size=(rbm.nHidden, nSamples))
 
 	# visibles, _ = sampler.sample(nMarkovChains=nSamples, nMarkovIter=1000)
-	for _ in range(1000):
+	for _ in range(400):
 		visibles = rbm.sampleVisible(hidden)
 		hidden = rbm.sampleHidden(visibles)
 
@@ -27,6 +26,8 @@ if __name__ == "__main__":
 
 	plt.show()
 	exit(1)
+
+
 	for i, visible in enumerate(visibles.T):
 		print(i)
 		plt.axis('off')
