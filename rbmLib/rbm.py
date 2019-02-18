@@ -7,6 +7,8 @@ def sigmoid(x):
 
 class RBM:
 	def __init__(self, nVisible=0, nHidden=0, randomSeed=None, filename=None):
+		self.rng = np.random.RandomState(randomSeed)
+
 		if filename is not None:
 			self.__load_unsave(filename)
 			return
@@ -15,7 +17,6 @@ class RBM:
 		self.nHidden = nHidden
 		self.nParams = nVisible * nHidden + nVisible + nHidden
 
-		self.rng = np.random.RandomState(randomSeed)
 		self.weights = np.asarray(self.rng.uniform(low=-0.01, high=0.01, size=self.nParams))
 
 		self.nTrainedEpochs = 0
@@ -70,7 +71,10 @@ class RBM:
 
 		print(f'Writing RBM to {filename}')
 		f = open(filename, 'wb')
-		pickle.dump(self.__dict__, f, 2)
+		tmpDict = self.__dict__.copy()
+		del tmpDict['filename']
+		del tmpDict['rng']
+		pickle.dump(tmpDict, f, 2)
 		f.close()
 
 	def __repr__(self):
