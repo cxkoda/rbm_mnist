@@ -1,17 +1,24 @@
 import numpy as np
 import pickle
+import os
 
 def sigmoid(x):
 	return 1. / (1. + np.exp(-x))
 
 class RBM:
-	def __init__(self, nVisible, nHidden, randomSeed=None):
+	def __init__(self, nVisible=0, nHidden=0, randomSeed=None, filename=None):
+		if filename is not None:
+			self.__load_unsave(filename)
+			return
+
 		self.nVisible = nVisible
 		self.nHidden = nHidden
 		self.nParams = nVisible * nHidden + nVisible + nHidden
 
 		self.rng = np.random.RandomState(randomSeed)
 		self.weights = np.asarray(self.rng.uniform(low=-0.01, high=0.01, size=self.nParams))
+
+		self.nUpdates = 0
 
 		# create some views on the stored weights
 		iStart = 0
@@ -26,13 +33,42 @@ class RBM:
 		iEnd += nHidden
 		self.C = self.weights[iStart: iEnd]
 
-	def load(self, filename):
+	def __load(self, filename):
+		self.filename = filename
+		if not os.path.isfile(filename):
+			raise FileExistsError('RBM load path does not exist')
+		print(f'Loading RBM from {filename}')
 		f = open(filename, 'rb')
-		tmp_dict = pickle.load(f)
+		tmpDict = pickle.load(f)
 		f.close()
-		self.__dict__.update(tmp_dict)
+		try:
+			del tmpDict['filename']
+		except:
+			pass
+		return tmpDict
 
-	def save(self, filename):
+	def load(self, filename):
+		tmpDict = self.__load(filename)
+		loadedNVisible = tmpDict['nVisible']
+		loadedNHidden = tmpDict['nHidden']
+		if self.nVisible != loadedNVisible or self.nHidden != loadedNHidden:
+			raise RuntimeError('Node number mismatch. Loaded RBM has %i visible and %i hidden nodes' %
+								(loadedNVisible, loadedNHidden))
+		self.__dict__.update(tmpDict)
+
+	def __load_unsave(self, filename):
+		tmpDict = self.__load(filename)
+		self.__dict__.update(tmpDict)
+
+	def save(self, filename=None):
+		if filename is None:
+			if not hasattr(self, 'filename'):
+				raise RuntimeError('No save path for the RBM was specified.')
+			filename = self.filename
+		else:
+			self.filename = filename
+
+		print(f'Writing RBM to {filename}')
 		f = open(filename, 'wb')
 		pickle.dump(self.__dict__, f, 2)
 		f.close()
@@ -84,6 +120,7 @@ class RBM:
 		return self.weights
 
 	def update(self, deltaTheta):
+		self.nUpdates += 1
 		self.weights += deltaTheta
 
 class gibbsSampler:
