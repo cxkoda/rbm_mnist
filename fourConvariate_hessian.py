@@ -12,13 +12,18 @@ if __name__ == "__main__":
 	# 	pass
 
 	testData = np.array([[0,0,0,0], [1,1,0,0], [0,0,1,1], [1,1,1,1], [1,1,1,1]])
+	for _ in range(11):
+		testData = np.vstack((testData, testData))
+	np.random.shuffle(testData)
+
+	print(len(testData))
 
 	trainer = RBMTrainerPCDHessian()
-	trainer.train(rbm, testData, learningRate=1, learningRateDecay=-1e-1, nMarkovChains=100, nMarkovIter=20,
-				  maxTrainingIter=1000, convergenceThreshold=1e-3)
+	trainer.train(rbm, testData, learningRate=1, learningRateDecay=-1e-1, nMarkovChains=400, nMarkovIter=5,
+				  epochs=1000, miniBatchSize=None, convergenceThreshold=1e-3, autosave=False)
 
 	rbm.save("simpleHessian.rbm")
-
+	print(rbm)
 
 	sampler = gibbsSampler(rbm)
 
