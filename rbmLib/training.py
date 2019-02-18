@@ -54,7 +54,7 @@ class RBMTrainerPCD:
 			self.rng.shuffle(visibleData)
 			for iMiniBatch in range(nMiniBatches):
 				miniBatch = visibleData[iMiniBatch * miniBatchSize : (iMiniBatch+1) * miniBatchSize].T
-				deltaTheta = self.get_deltaTheta(rbm, miniBatch, nMarkovChains, nMarkovIter)
+				deltaTheta = self.get_deltaTheta(rbm, miniBatch, nMarkovChains, nMarkovIter) / nMiniBatches
 
 				if np.isnan(deltaTheta).any():
 					raise RuntimeError('Nans detected during training')
@@ -67,8 +67,6 @@ class RBMTrainerPCD:
 			epochEndTime = datetime.datetime.now()
 			print(f'\tTime elapsed for epoch:             {epochEndTime - epochStartTime}')
 			print(f'\tTotal training time:                {datetime.datetime.now() - trainingStartTime}')
-
-			convergenceScores[iScore] /= nMiniBatches
 			print(f'\tAveraged relative MiniBatch-Update: {convergenceScores[iScore]}')
 
 			rbm.nTrainedEpochs += 1
