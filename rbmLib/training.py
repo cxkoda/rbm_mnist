@@ -2,13 +2,13 @@ from rbmLib.rbm import *
 import numpy as np
 
 
-class RBMTrainerPCB:
+class RBMTrainerPCD:
 	def __init__(self,  randomSeed=None):
 		self.randomSeed = randomSeed
+		self.rng = np.random.RandomState(randomSeed)
 
-	def prepare(self, rbm, visibleData):
+	def prepare(self, rbm, visibleData, miniBatchSize):
 		self.gibbs = gibbsSampler(rbm, randomSeed=self.randomSeed)
-		return visibleData.T
 
 	def get_deltaTheta(self, rbm, visibleData, nMarkovChains, nMarkovIter):
 		hiddenDataSample = rbm.sampleHidden(visibleData)
@@ -16,92 +16,99 @@ class RBMTrainerPCB:
 		positivePhase = np.mean(rbm.logProb_dTheta(visibleData, hiddenDataSample), axis=1)
 
 		sampledVisible, sampledHidden = self.gibbs.sample(nMarkovChains, nMarkovIter)
+		sampledHidden = rbm.probHiddenGivenVisible(sampledVisible, 1)
 		negativePhase = np.mean(rbm.logProb_dTheta(sampledVisible, sampledHidden), axis=1)
 
 		deltaTheta = positivePhase - negativePhase
 		return deltaTheta
 
-	def train(self, rbm, visibleData, learningRate=0.1, nMarkovChains=100, nMarkovIter=100, maxTrainingIter=10000, convergenceThreshold=1e-3):
+	def train(self, rbm, visibleData,
+				learningRate=0.1, learningRateDecay=0,
+				nMarkovChains=100, nMarkovIter=10,
+				epochs = 100, miniBatchSize=1000, convergenceThreshold=1e-3,
+				autosave = 10
+			):
 		assert(isinstance(rbm, RBM))
-		visibleData = self.prepare(rbm, visibleData)
+		self.prepare(rbm, visibleData, miniBatchSize)
 
-		for iTrainingIter in range(maxTrainingIter):
-			try:
-				deltaTheta = self.get_deltaTheta(rbm, visibleData, nMarkovChains, nMarkovIter)
-			except Exception as e:
-				print('Training Aborted: exception in get_delta:', e)
-				break
+		nConvergesScores = 3
+		convergenceScores = [1] * nConvergesScores
 
-			if np.isnan(deltaTheta).any():
-				print('Training Aborted: nans detected')
-				break
+		nMiniBatches = int(visibleData.shape[1] / miniBatchSize)
+		iEpoch = 0
+		while iEpoch < epochs:
+			iEpoch += 1
+			iScore = iEpoch % nConvergesScores
+			convergenceScores[iScore] = 0
 
-			rbm.update(learningRate * deltaTheta)
+			currentLearningRate = learningRate * np.power(iEpoch + 1, learningRateDecay)
+			print(f'Epoch: {iEpoch}'
+				  f'\n\tCurrent LearningRate: {currentLearningRate}')
 
-			relUpdate = np.linalg.norm(deltaTheta / rbm.get_params()) / rbm.nParams
-			print(f'Training Iteration: {iTrainingIter} -> {relUpdate}')
+			self.rng.shuffle(visibleData)
+			for iMiniBatch in range(nMiniBatches):
+				miniBatch = visibleData[iMiniBatch * miniBatchSize : (iMiniBatch+1) * miniBatchSize].T
+				deltaTheta = self.get_deltaTheta(rbm, miniBatch, nMarkovChains, nMarkovIter)
 
-			if relUpdate < convergenceThreshold:
+				if np.isnan(deltaTheta).any():
+					print('Training Aborted: nans detected')
+					break
+
+				rbm.update(currentLearningRate * deltaTheta)
+
+				relUpdate = np.linalg.norm(deltaTheta / rbm.get_params()) / rbm.nParams
+				convergenceScores[iScore] += relUpdate
+
+			convergenceScores[iScore] /= nMiniBatches
+			print(f'\tAveraged relative MiniBatch-Update:      {convergenceScores[iScore]}'				  f'\n')
+
+			if autosave > 0:
+				if iEpoch % autosave == 0:
+					rbm.save()
+
+			if (np.array(convergenceScores) < convergenceThreshold).all():
 				print('Training Converged')
 				break
 
-		print(rbm)
+class RBMTrainerPCDHessian(RBMTrainerPCD):
+	def __init__(self, randomSeed=None):
+		RBMTrainerPCD.__init__(self, randomSeed)
 
-class RBMTrainerPCBBroyden(RBMTrainerPCB):
-	def __init__(self, nMarkovChains):
-		RBMTrainerPCB.__init__(self, nMarkovChains)
+	def prepare(self, rbm, visibleData, miniBatchSize):
+		visibleData = RBMTrainerPCD.prepare(self, rbm, visibleData, miniBatchSize)
+		self.hessian = np.diagflat(np.ones(rbm.nParams))
 		self.deltaTheta_old = 0
 		self.logProb_dTheta_old = 0
-
-	def prepare(self, rbm, visibleData):
-		visibleData = RBMTrainerPCB.prepare(self, rbm, visibleData)
-		self.inverseHessian = np.diagflat(np.ones(rbm.nParams))
-
-		# First step is explicit in the broyden scheme
-		hiddenDataSample = rbm.sampleHidden(visibleData)
-
-		positivePhase = np.mean(rbm.logProb_dTheta(visibleData, hiddenDataSample), axis=-1)
-
-		self.gibbs(rbm, 100)
-		negativeVectors = rbm.logProb_dTheta(self.markovVisible, self.markovHidden)
-		negativePhase = np.mean(negativeVectors, axis=-1)
-
-		logProb_dTheta = positivePhase - negativePhase
-
-		self.logProb_dTheta_old = logProb_dTheta
-
-		hessian = np.mean(np.einsum('ik,jk->ijk', negativeVectors, negativeVectors), axis=-1) - np.outer(negativePhase, negativePhase)
-		self.inverseHessian = np.linalg.inv(hessian)
-
-		deltaTheta = self.inverseHessian @ logProb_dTheta
-		rbm.update(deltaTheta)
-		self.deltaTheta_old = deltaTheta
 
 		return visibleData
 
 
-	def get_deltaTheta(self, rbm, visibleData, nMarkovIter):
+	def get_deltaTheta(self, rbm, visibleData, nMarkovChains, nMarkovIter):
 		hiddenDataSample = rbm.sampleHidden(visibleData)
 
 		positivePhase = np.mean(rbm.logProb_dTheta(visibleData, hiddenDataSample), axis=-1)
 
-		self.gibbs(rbm, nMarkovIter)
-		negativeVectors = rbm.logProb_dTheta(self.markovVisible, self.markovHidden)
+		sampledVisible, sampledHidden = self.gibbs.sample(nMarkovChains, nMarkovIter)
+		sampledHidden = rbm.probHiddenGivenVisible(sampledVisible, 1)
+		negativeVectors = rbm.logProb_dTheta(sampledVisible, sampledHidden)
 		negativePhase = np.mean(negativeVectors, axis=-1)
 
 		logProb_dTheta = positivePhase - negativePhase
 
-		# # Broyden's Inverse update
-		# temp1 = self.inverseHessian @ logProb_dTheta
-		# temp2 = self.deltaTheta_old @ (self.deltaTheta_old + temp1)
-		# self.inverseHessian -= np.outer(temp1, self.deltaTheta_old) @ self.inverseHessian / temp2
-		# deltaTheta = - self.inverseHessian @ logProb_dTheta
+		hessian = - np.mean(np.einsum('ik,jk->ijk', negativeVectors, negativeVectors), axis=-1) + np.outer(negativePhase, negativePhase)
+		update = - hessian + np.identity(hessian.shape[0])
+		negHessian = - hessian
 
-		hessian = np.mean(np.einsum('ik,jk->ijk', negativeVectors, negativeVectors), axis=-1) - np.outer(negativePhase, negativePhase)
-		deltaTheta = - np.linalg.solve(hessian.T @ hessian, hessian.T @ logProb_dTheta)
+		deltaTheta = logProb_dTheta
+		Ainv = 1. / (np.diagonal(negHessian) + 1e-20 * np.linalg.norm(deltaTheta))
+		B = (np.triu(negHessian) + np.tril(negHessian))
+
+		for _ in range(20):
+			Ainv @ (logProb_dTheta - B @ deltaTheta)
+
+
 
 		self.deltaTheta_old = deltaTheta
 		self.logProb_dTheta_old = logProb_dTheta
 
 		return deltaTheta
-
