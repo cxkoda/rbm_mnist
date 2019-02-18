@@ -1,5 +1,6 @@
 from rbmLib.rbm import *
 import numpy as np
+import datetime
 
 
 class RBMTrainerPCD:
@@ -31,19 +32,24 @@ class RBMTrainerPCD:
 		assert(isinstance(rbm, RBM))
 		self.prepare(rbm, visibleData, miniBatchSize)
 
+		if miniBatchSize is None:
+			miniBatchSize = len(visibleData)
+
 		nConvergesScores = 3
 		convergenceScores = [1] * nConvergesScores
 
-		nMiniBatches = int(visibleData.shape[1] / miniBatchSize)
+		nMiniBatches = int(len(visibleData) / miniBatchSize)
 		iEpoch = 0
+		trainingStartTime = datetime.datetime.now()
 		while iEpoch < epochs:
 			iEpoch += 1
+			epochStartTime = datetime.datetime.now()
 			iScore = iEpoch % nConvergesScores
 			convergenceScores[iScore] = 0
 
-			currentLearningRate = learningRate * np.power(iEpoch + 1, learningRateDecay)
-			print(f'Epoch: {iEpoch}'
-				  f'\n\tCurrent LearningRate: {currentLearningRate}')
+			currentLearningRate = learningRate * np.power(iEpoch, learningRateDecay)
+			print(f'Epoch: {iEpoch}')
+			print(f'\tCurrent LearningRate:               {currentLearningRate}')
 
 			self.rng.shuffle(visibleData)
 			for iMiniBatch in range(nMiniBatches):
@@ -51,16 +57,23 @@ class RBMTrainerPCD:
 				deltaTheta = self.get_deltaTheta(rbm, miniBatch, nMarkovChains, nMarkovIter)
 
 				if np.isnan(deltaTheta).any():
-					print('Training Aborted: nans detected')
-					break
+					raise RuntimeError('Nans detected during training')
 
 				rbm.update(currentLearningRate * deltaTheta)
 
 				relUpdate = np.linalg.norm(deltaTheta / rbm.get_params()) / rbm.nParams
 				convergenceScores[iScore] += relUpdate
 
+			epochEndTime = datetime.datetime.now()
+			print(f'\tTime elapsed for epoch:             {epochEndTime - epochStartTime}')
+			print(f'\tTotal training time:                {datetime.datetime.now() - trainingStartTime}')
+
 			convergenceScores[iScore] /= nMiniBatches
-			print(f'\tAveraged relative MiniBatch-Update:      {convergenceScores[iScore]}'				  f'\n')
+			print(f'\tAveraged relative MiniBatch-Update: {convergenceScores[iScore]}')
+
+			rbm.nTrainedEpochs += 1
+			print(f'\tTotal epochs trained:               {rbm.nTrainedEpochs}')
+			print(f'')
 
 			if autosave > 0:
 				if iEpoch % autosave == 0:
@@ -69,6 +82,9 @@ class RBMTrainerPCD:
 			if (np.array(convergenceScores) < convergenceThreshold).all():
 				print('Training Converged')
 				break
+
+		if autosave > 0:
+			rbm.save()
 
 class RBMTrainerPCDHessian(RBMTrainerPCD):
 	def __init__(self, randomSeed=None):

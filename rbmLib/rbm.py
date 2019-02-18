@@ -18,7 +18,7 @@ class RBM:
 		self.rng = np.random.RandomState(randomSeed)
 		self.weights = np.asarray(self.rng.uniform(low=-0.01, high=0.01, size=self.nParams))
 
-		self.nUpdates = 0
+		self.nTrainedEpochs = 0
 
 		# create some views on the stored weights
 		iStart = 0
@@ -120,7 +120,6 @@ class RBM:
 		return self.weights
 
 	def update(self, deltaTheta):
-		self.nUpdates += 1
 		self.weights += deltaTheta
 
 class gibbsSampler:
@@ -133,7 +132,6 @@ class gibbsSampler:
 		self.nMarkovChains = nMarkovChains
 		self.markovVisible = self.rng.random_integers(0, 1, size=(self.rbm.nVisible, self.nMarkovChains))
 		self.markovHidden = self.rng.random_integers(0, 1, size=(self.rbm.nHidden, self.nMarkovChains))
-
 
 	def sample(self, nMarkovChains=100, nMarkovIter=100):
 		if self.nMarkovChains != nMarkovChains:
