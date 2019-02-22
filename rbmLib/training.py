@@ -90,26 +90,31 @@ class RBMTrainerPCDHessian(RBMTrainerPCD):
 
 	def get_deltaTheta(self, rbm, visibleData, nMarkovChains, nMarkovIter):
 		hiddenDataSample = rbm.sampleHidden(visibleData)
-
-		positivePhase = np.mean(rbm.logProb_dTheta(visibleData, hiddenDataSample), axis=-1)
+		positivePhaseGradients = rbm.logProb_dTheta(visibleData, hiddenDataSample)
+		nPos = positivePhaseGradients.shape[-1]
+		positivePhase = np.mean(positivePhaseGradients, axis=-1)
 
 		sampledVisible, sampledHidden = self.gibbs.sample(nMarkovChains, nMarkovIter)
 		sampledHidden = rbm.probHiddenGivenVisible(sampledVisible, 1)
-		negativeVectors = rbm.logProb_dTheta(sampledVisible, sampledHidden)
-		negativePhase = np.mean(negativeVectors, axis=-1)
+		negativePhaseGradients = rbm.logProb_dTheta(sampledVisible, sampledHidden)
+		nNeg = negativePhaseGradients.shape[-1]
+		negativePhase = np.mean(negativePhaseGradients, axis=-1)
 
 		logProb_dTheta = positivePhase - negativePhase
 		deltaTheta = logProb_dTheta
 
-		meanNegVec 	  = np.mean(negativeVectors, axis=-1)
-		meanNegVecSqr = np.mean(negativeVectors**2, axis=-1)
-		hessDiag = meanNegVec**2 - meanNegVecSqr
+		meanNegativeGradients	 = np.mean(negativePhaseGradients, axis=-1)
+		meanNegativeGradientsSqr = np.mean(negativePhaseGradients**2, axis=-1)
 
+		hessDiag = - nPos * (meanNegativeGradientsSqr - meanNegativeGradients**2)
 		hessDiagInv = 1. / (hessDiag - 1)
 
-		for _ in range(20):
-			temp = negativeVectors.T @ deltaTheta
-			hessTimesDelta = meanNegVec * np.mean(temp) - (negativeVectors @ temp) / negativeVectors.shape[-1]
-			deltaTheta = hessDiagInv * (logProb_dTheta - (hessTimesDelta)) + deltaTheta
+		for _ in range(1):
+			tempNeg = negativePhaseGradients.T @ deltaTheta
+			hessTimesDelta = - nPos * (
+					(negativePhaseGradients @ tempNeg) / nNeg
+					- meanNegativeGradients * np.mean(tempNeg)
+			)
+			deltaTheta = hessDiagInv * (logProb_dTheta - (hessTimesDelta - hessDiag * deltaTheta))
 
 		return -deltaTheta
