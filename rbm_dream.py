@@ -6,7 +6,7 @@ import matplotlib.animation as animation
 
 
 if __name__ == "__main__":
-	rbm = RBM(filename="mnist_100.rbm")
+	rbm = RBM(filename="trainedRBMs/mnist_100.rbm")
 	fig = plt.figure()
 
 	hidden = np.random.random_integers(0, 1, size=rbm.nHidden)

@@ -14,20 +14,29 @@ if __name__ == "__main__":
 	fig, ax = plt.subplots(2, 2)
 
 	idx = np.random.randint(0, imgs.shape[0])
-	ax[1, 0].imshow(mnist[idx].reshape((28,28)))
+	ax[0, 0].imshow(mnist[idx].reshape((28,28)))
+	ax[0, 0].axis('off')
+	ax[0, 0].set_title('Original Mnist')
 
-	rbm = RBM(filename="mnist_200.rbm")
+
+	ax[0, 1].imshow(imgs[idx].reshape((28, 28)))
+	ax[0, 1].axis('off')
+	ax[0, 1].set_title('Binarized Mnist')
+
+	rbm = RBM(filename="trainedRBMs/mnist_100.rbm")
 
 	visibles = imgs[idx]
 	hidden = rbm.sampleHidden(visibles)
 	visibles = rbm.sampleVisible(hidden)
 
-	ax[0, 1].imshow(visibles.reshape((28, 28)))
+	ax[1, 0].imshow(visibles.reshape((28, 28)))
+	ax[1, 0].axis('off')
+	ax[1, 0].set_title('RBM Reconstructed')
+
 	visibles = rbm.probVisibleGivenHidden(1, hidden)
-
 	ax[1, 1].imshow(visibles.reshape((28,28)))
+	ax[1, 1].axis('off')
+	ax[1, 1].set_title('RBM Visible Probability')
 
-	ax[0, 0].imshow(imgs[idx].reshape((28, 28)))
-
-
+	#plt.savefig('comparison.pdf')
 	plt.show()

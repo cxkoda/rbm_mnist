@@ -13,7 +13,7 @@ if __name__ == "__main__":
 	rbm = RBM(784, 100)
 
 	try:
-		rbm.load("mnist_100.rbm")
+		rbm.load("trainedRBMs/mnist_100.rbm")
 	except:
 		pass
 
@@ -21,8 +21,8 @@ if __name__ == "__main__":
 
 	trainer.train(rbm, imgs,
 				learningRate=1, learningRateDecay=-1e-1,
-				nMarkovChains=100, nMarkovIter=5,
-				epochs=1000, convergenceThreshold=1e-8, miniBatchSize=100, autosave=1)
+				nMarkovChains=100, nMarkovIter=1,
+				epochs=50, convergenceThreshold=1e-8, miniBatchSize=100, autosave=1)
 
 
 
